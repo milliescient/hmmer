@@ -95,6 +95,7 @@ static ESL_OPTIONS options[] = {
   { "--nonull2",    eslARG_NONE,   NULL,  NULL, NULL,    NULL,  NULL,  NULL,            "turn off biased composition score corrections",               12 },
   { "-Z",           eslARG_REAL,   FALSE, NULL, "x>0",   NULL,  NULL,  NULL,            "set # of comparisons done, for E-value calculation",          12 },
   { "--domZ",       eslARG_REAL,   FALSE, NULL, "x>0",   NULL,  NULL,  NULL,            "set # of significant seqs, for domain E-value calculation",   12 },
+  { "--bgfile",     eslARG_INFILE, NULL, NULL, NULL,    NULL,  NULL,            NULL, "read background residue frequencies from <f>",                12 },
   { "--seed",       eslARG_INT,    "42",  NULL, "n>=0",  NULL,  NULL,  NULL,            "set RNG seed to <n> (if 0: one-time arbitrary seed)",         12 },
   { "--tformat",    eslARG_STRING,  NULL, NULL, NULL,    NULL,  NULL,  NULL,            "assert target <seqfile> is in format <s>: no autodetection",  12 },
 
@@ -442,6 +443,12 @@ serial_master(ESL_GETOPTS *go, struct cfg_s *cfg)
       for (i = 0; i < infocnt; ++i)
 	{
 	  info[i].bg    = p7_bg_Create(abc);
+	  if (esl_opt_IsUsed(go, "--bgfile")) {
+	    char bgerr[eslERRBUFSIZE];
+	    if (info[i].bg == NULL ||
+	        p7_bg_SetFromFile(info[i].bg, esl_opt_GetString(go, "--bgfile"), bgerr) != eslOK)
+	      p7_Fail("%s", bgerr);
+	  }
 #ifdef HMMER_THREADS
 	  info[i].queue = queue;
 #endif
@@ -897,6 +904,12 @@ mpi_master(ESL_GETOPTS *go, struct cfg_s *cfg)
       output_header(ofp, go, cfg->hmmfile, cfg->dbfile);
       dbsq = esl_sq_CreateDigital(abc);
       bg = p7_bg_Create(abc);
+      if (esl_opt_IsUsed(go, "--bgfile")) {
+        char bgerr[eslERRBUFSIZE];
+        if (bg == NULL ||
+            p7_bg_SetFromFile(bg, esl_opt_GetString(go, "--bgfile"), bgerr) != eslOK)
+          p7_Fail("%s", bgerr);
+      }
     }
   
 
@@ -1173,6 +1186,12 @@ mpi_worker(ESL_GETOPTS *go, struct cfg_s *cfg)
       /* One-time initializations after alphabet <abc> becomes known */
       dbsq = esl_sq_CreateDigital(abc);
       bg = p7_bg_Create(abc);
+      if (esl_opt_IsUsed(go, "--bgfile")) {
+        char bgerr[eslERRBUFSIZE];
+        if (bg == NULL ||
+            p7_bg_SetFromFile(bg, esl_opt_GetString(go, "--bgfile"), bgerr) != eslOK)
+          p7_Fail("%s", bgerr);
+      }
       esl_sqfile_SetDigital(dbfp, abc);
     }
   
