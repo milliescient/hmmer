@@ -1492,6 +1492,7 @@ extern int            p7_alidisplay_Compare(const P7_ALIDISPLAY *ad1, const P7_A
 
 /* p7_bg.c */
 extern P7_BG *p7_bg_Create(const ESL_ALPHABET *abc);
+extern int     p7_bg_SetFromFile(P7_BG *bg, const char *bgfile, char *errbuf);
 extern P7_BG *p7_bg_CreateUniform(const ESL_ALPHABET *abc);
 extern P7_BG *p7_bg_Clone(const P7_BG *bg);
 extern int    p7_bg_Dump(FILE *ofp, const P7_BG *bg);
@@ -1661,6 +1662,7 @@ extern int p7_pli_Statistics(FILE *ofp, P7_PIPELINE *pli, ESL_STOPWATCH *w);
 extern P7_PRIOR  *p7_prior_CreateAmino(void);
 extern P7_PRIOR  *p7_prior_CreateNucleic(void);
 extern P7_PRIOR  *p7_prior_CreateLaplace(const ESL_ALPHABET *abc);
+extern P7_PRIOR  *p7_prior_CreateFile(const ESL_ALPHABET *abc, const char *priorfile, char *errbuf);
 extern void       p7_prior_Destroy(P7_PRIOR *pri);
 
 extern int        p7_ParameterEstimation(P7_HMM *hmm, const P7_PRIOR *pri);

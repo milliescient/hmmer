@@ -14,6 +14,9 @@
 
 #include <string.h>
 
+#include <string.h>
+#include <stdlib.h>
+
 #include "easel.h"
 #include "esl_alphabet.h"
 #include "esl_hmm.h"
@@ -77,6 +80,78 @@ p7_bg_Create(const ESL_ALPHABET *abc)
  ERROR:
   p7_bg_Destroy(bg);
   return NULL;
+}
+
+
+/* Function:  p7_bg_SetFromFile()
+ * Synopsis:  Replace a background's residue frequencies from a file.
+ *
+ * Purpose:   Overwrite the residue frequencies of <bg> with <abc->K> values
+ *            read from <bgfile>, then renormalise.
+ *
+ *            The built-in amino acid background is the right null for amino
+ *            acids and wrong for any other alphabet that happens to reuse the
+ *            same letters. Foldseek's 3Di structural states do exactly that:
+ *            twenty letters, but composition D 29% and V 23% against a protein
+ *            background near 5% each. Two things then break. The null model a
+ *            search scores against is wrong, so bit scores are inflated wherever
+ *            the common states cluster. And entropy weighting measures relative
+ *            entropy against that background, so for 3Di the target is
+ *            unreachable and hmmbuild dies in the root finder with "xl,xr do not
+ *            bracket a root" unless weighting is switched off.
+ *
+ *            Format as for the emission prior: <abc->K> whitespace-separated
+ *            positive numbers in alphabet order, '#' comments ignored. Values
+ *            need not sum to one.
+ *
+ * Returns:   <eslOK> on success, with <bg> modified in place.
+ */
+int
+p7_bg_SetFromFile(P7_BG *bg, const char *bgfile, char *errbuf)
+{
+  FILE   *fp = NULL;
+  char    buf[512];
+  double  v[256];
+  int     n = 0;
+  int     i;
+
+  if (errbuf) errbuf[0] = '\0';
+  if (bg == NULL || bg->abc == NULL) return eslEINVAL;
+  if (bg->abc->K > 256)              return eslEINVAL;
+
+  if ((fp = fopen(bgfile, "r")) == NULL) {
+    if (errbuf) snprintf(errbuf, eslERRBUFSIZE, "failed to open background file %s", bgfile);
+    return eslFAIL;
+  }
+  while (fgets(buf, sizeof(buf), fp) != NULL) {
+    char *s = buf;
+    char *tok;
+    while (*s == ' ' || *s == '\t') s++;
+    if (*s == '#' || *s == '\n' || *s == '\0') continue;
+    while ((tok = strtok(s, " \t\n")) != NULL) {
+      s = NULL;
+      if (n >= bg->abc->K) { n++; break; }
+      v[n] = atof(tok);
+      if (v[n] <= 0.0) {
+        fclose(fp);
+        if (errbuf) snprintf(errbuf, eslERRBUFSIZE,
+                             "background frequency %d in %s is not positive", n + 1, bgfile);
+        return eslFAIL;
+      }
+      n++;
+    }
+    if (n > bg->abc->K) break;
+  }
+  fclose(fp);
+  if (n != bg->abc->K) {
+    if (errbuf) snprintf(errbuf, eslERRBUFSIZE,
+                         "background file %s holds %d frequencies, expected %d",
+                         bgfile, n, bg->abc->K);
+    return eslFAIL;
+  }
+  for (i = 0; i < bg->abc->K; i++) bg->f[i] = (float) v[i];
+  esl_vec_FNorm(bg->f, bg->abc->K);
+  return eslOK;
 }
 
 

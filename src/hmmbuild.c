@@ -102,6 +102,8 @@ static ESL_OPTIONS options[] = {
   /* Alternative prior strategies */
   { "--pnone",   eslARG_NONE,  FALSE,  NULL, NULL,       NULL,  NULL,"--plaplace", "don't use any prior; parameters are frequencies",      9 },
   { "--plaplace",eslARG_NONE,  FALSE,  NULL, NULL,       NULL,  NULL,   "--pnone", "use a Laplace +1 prior",                               9 },
+  { "--pfile",   eslARG_INFILE, NULL,  NULL, NULL,       NULL,  NULL,"--pnone,--plaplace", "read a single-component emission prior from <f>", 9 },
+  { "--bgfile",  eslARG_INFILE, NULL,  NULL, NULL,       NULL,  NULL,       NULL, "read background residue frequencies from <f>",          9 },
 
   /* Single sequence methods */
   { "--singlemx", eslARG_NONE,   FALSE, NULL,   NULL,   NULL,  NULL,           "",   "use substitution score matrix for single-sequence inputs",     10 },
@@ -324,6 +326,7 @@ output_header(const ESL_GETOPTS *go, const struct cfg_s *cfg)
   if (esl_opt_IsUsed(go, "--eid")        && fprintf(cfg->ofp, "# frac id cutoff for --eclust:      %f\n",        esl_opt_GetReal(go, "--eid"))        < 0) ESL_EXCEPTION_SYS(eslEWRITE, "write failed");
   if (esl_opt_IsUsed(go, "--pnone")      && fprintf(cfg->ofp, "# prior scheme:                     none\n")                                           < 0) ESL_EXCEPTION_SYS(eslEWRITE, "write failed");
   if (esl_opt_IsUsed(go, "--plaplace")   && fprintf(cfg->ofp, "# prior scheme:                     Laplace +1\n")                                     < 0) ESL_EXCEPTION_SYS(eslEWRITE, "write failed");
+  if (esl_opt_IsUsed(go, "--pfile")      && fprintf(cfg->ofp, "# prior scheme:                     from file %s\n", esl_opt_GetString(go, "--pfile")) < 0) ESL_EXCEPTION_SYS(eslEWRITE, "write failed");
   if (esl_opt_IsUsed(go, "--EmL")        && fprintf(cfg->ofp, "# seq length for MSV Gumbel mu fit: %d\n",        esl_opt_GetInteger(go, "--EmL"))     < 0) ESL_EXCEPTION_SYS(eslEWRITE, "write failed");
   if (esl_opt_IsUsed(go, "--EmN")        && fprintf(cfg->ofp, "# seq number for MSV Gumbel mu fit: %d\n",        esl_opt_GetInteger(go, "--EmN"))     < 0) ESL_EXCEPTION_SYS(eslEWRITE, "write failed");
   if (esl_opt_IsUsed(go, "--EvL")        && fprintf(cfg->ofp, "# seq length for Vit Gumbel mu fit: %d\n",        esl_opt_GetInteger(go, "--EvL"))     < 0) ESL_EXCEPTION_SYS(eslEWRITE, "write failed");
@@ -563,6 +566,12 @@ usual_master(const ESL_GETOPTS *go, struct cfg_s *cfg)
   for (i = 0; i < infocnt; ++i)
   {
       info[i].bg = p7_bg_Create(cfg->abc);
+      if (esl_opt_IsUsed(go, "--bgfile")) {
+        char bgerr[eslERRBUFSIZE];
+        if (info[i].bg == NULL ||
+            p7_bg_SetFromFile(info[i].bg, esl_opt_GetString(go, "--bgfile"), bgerr) != eslOK)
+          p7_Fail("%s", bgerr);
+      }
       info[i].bld = p7_builder_Create(go, cfg->abc);
 
       if (info[i].bld == NULL)  p7_Fail("p7_builder_Create failed");
@@ -744,6 +753,12 @@ mpi_master(const ESL_GETOPTS *go, struct cfg_s *cfg)
   if ((msalist = malloc(sizeof(ESL_MSA *) * cfg->nproc)) == NULL) mpi_init_other_failure("allocation failed"); 
   if ((msaidx  = malloc(sizeof(int)       * cfg->nproc)) == NULL) mpi_init_other_failure("allocation failed"); 
   if ((bg      = p7_bg_Create(cfg->abc))                 == NULL) mpi_init_other_failure("allocation failed"); 
+  if (esl_opt_IsUsed(go, "--bgfile")) {
+    char bgerr[eslERRBUFSIZE];
+    if (bg == NULL ||
+        p7_bg_SetFromFile(bg, esl_opt_GetString(go, "--bgfile"), bgerr) != eslOK)
+      p7_Fail("%s", bgerr);
+  }
 
   for (wi = 0; wi < cfg->nproc; wi++) { msalist[wi] = NULL; msaidx[wi] = 0; } 
 
@@ -947,6 +962,12 @@ mpi_worker(const ESL_GETOPTS *go, struct cfg_s *cfg)
   }
 
   bg = p7_bg_Create(cfg->abc);
+  if (esl_opt_IsUsed(go, "--bgfile")) {
+    char bgerr[eslERRBUFSIZE];
+    if (bg == NULL ||
+        p7_bg_SetFromFile(bg, esl_opt_GetString(go, "--bgfile"), bgerr) != eslOK)
+      p7_Fail("%s", bgerr);
+  }
 
   ESL_DPRINTF2(("worker %d: initialized\n", cfg->my_rank));
 

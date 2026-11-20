@@ -129,6 +129,10 @@ p7_builder_Create(const ESL_GETOPTS *go, const ESL_ALPHABET *abc)
 
   if      (go && esl_opt_GetBoolean(go, "--pnone") )     bld->prior = NULL;
   else if (go && esl_opt_GetBoolean(go, "--plaplace") )  bld->prior = p7_prior_CreateLaplace(abc);
+  else if (go && esl_opt_IsUsed(go, "--pfile") ) {
+    bld->prior = p7_prior_CreateFile(abc, esl_opt_GetString(go, "--pfile"), bld->errbuf);
+    if (bld->prior == NULL) goto ERROR;
+  }
   else
     {
       switch (abc->type) {

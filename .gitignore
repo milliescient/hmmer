@@ -48,3 +48,8 @@ src/makehmmerdb
 src/nhmmer
 src/nhmmscan
 src/phmmer
+
+# local build
+/local/
+/configure
+/easel/configure

@@ -4,6 +4,9 @@
  */
 #include <p7_config.h>
 
+#include <string.h>
+#include <stdlib.h>
+
 #include "easel.h"
 #include "esl_alphabet.h"
 #include "esl_vectorops.h"
@@ -220,6 +223,105 @@ p7_prior_CreateNucleic(void)
   return NULL;
 }
 
+
+
+/* Function:  p7_prior_CreateFile()
+ * Synopsis:  Creates a single-component emission prior read from a file.
+ *
+ * Purpose:   Create a prior for alphabet <abc> whose match and insert emission
+ *            Dirichlets are read from <priorfile>, leaving the transition
+ *            priors at Laplace plus-one.
+ *
+ *            The built-in amino acid prior is a nine-component mixture trained
+ *            on Blocks9, so it encodes beliefs about amino acids. Applied to a
+ *            different alphabet that happens to reuse the same letters, such as
+ *            Foldseek's 3Di structural states, those beliefs are simply wrong,
+ *            and the alternatives hmmbuild offers are a flat Laplace or nothing
+ *            at all. Neither is close: fitting a single Dirichlet to pooled 3Di
+ *            alignment columns gives a concentration near 1.2 against Laplace's
+ *            20, with a mean nothing like flat. --pnone is worse still, since
+ *            unobserved states then take probability zero and any target
+ *            carrying one is penalised infinitely.
+ *
+ *            The file holds <abc->K> whitespace-separated positive numbers, the
+ *            Dirichlet parameters in alphabet order, on any number of lines.
+ *            Lines beginning with '#' are ignored. Scale carries the meaning:
+ *            the sum is the concentration, deciding how hard a sparse column is
+ *            pulled toward the mean, and the normalised vector is the mean.
+ *
+ * Returns:   a pointer to the new <P7_PRIOR>, or <NULL> on failure, with an
+ *            error message left in <errbuf> when that is non-<NULL>.
+ */
+P7_PRIOR *
+p7_prior_CreateFile(const ESL_ALPHABET *abc, const char *priorfile, char *errbuf)
+{
+  P7_PRIOR *pri = NULL;
+  double   *a   = NULL;
+  FILE     *fp  = NULL;
+  char      buf[512];
+  int       n   = 0;
+  int       i;
+  int       status;
+
+  if (errbuf) errbuf[0] = '\0';
+  ESL_ALLOC(a, sizeof(double) * abc->K);
+
+  if ((fp = fopen(priorfile, "r")) == NULL) {
+    if (errbuf) snprintf(errbuf, eslERRBUFSIZE, "failed to open prior file %s", priorfile);
+    goto ERROR;
+  }
+  while (fgets(buf, sizeof(buf), fp) != NULL) {
+    char *s = buf;
+    char *tok;
+    while (*s == ' ' || *s == '\t') s++;
+    if (*s == '#' || *s == '\n' || *s == '\0') continue;
+    while ((tok = strtok(s, " \t\n")) != NULL) {
+      s = NULL;
+      if (n >= abc->K) { n++; break; }
+      a[n] = atof(tok);
+      if (a[n] <= 0.0) {
+        if (errbuf) snprintf(errbuf, eslERRBUFSIZE,
+                             "prior parameter %d in %s is not positive", n + 1, priorfile);
+        goto ERROR;
+      }
+      n++;
+    }
+    if (n > abc->K) break;
+  }
+  fclose(fp); fp = NULL;
+  if (n != abc->K) {
+    if (errbuf) snprintf(errbuf, eslERRBUFSIZE,
+                         "prior file %s holds %d parameters, expected %d", priorfile, n, abc->K);
+    goto ERROR;
+  }
+
+  ESL_ALLOC(pri, sizeof(P7_PRIOR));
+  pri->tm = pri->ti = pri->td = pri->em = pri->ei = NULL;
+  pri->tm = esl_mixdchlet_Create(1, 3);
+  pri->ti = esl_mixdchlet_Create(1, 2);
+  pri->td = esl_mixdchlet_Create(1, 2);
+  pri->em = esl_mixdchlet_Create(1, abc->K);
+  pri->ei = esl_mixdchlet_Create(1, abc->K);
+  if (pri->tm == NULL || pri->ti == NULL || pri->td == NULL || pri->em == NULL || pri->ei == NULL) goto ERROR;
+
+  pri->tm->q[0] = 1.0;   esl_vec_DSet(pri->tm->alpha[0], 3, 1.0);
+  pri->ti->q[0] = 1.0;   esl_vec_DSet(pri->ti->alpha[0], 2, 1.0);
+  pri->td->q[0] = 1.0;   esl_vec_DSet(pri->td->alpha[0], 2, 1.0);
+  pri->em->q[0] = 1.0;
+  pri->ei->q[0] = 1.0;
+  for (i = 0; i < abc->K; i++) {
+    pri->em->alpha[0][i] = a[i];
+    pri->ei->alpha[0][i] = a[i];
+  }
+  free(a);
+  return pri;
+
+ ERROR:
+  if (fp  != NULL) fclose(fp);
+  if (a   != NULL) free(a);
+  p7_prior_Destroy(pri);
+  return NULL;
+}
 
 
 /* Function:  p7_prior_CreateLaplace()
